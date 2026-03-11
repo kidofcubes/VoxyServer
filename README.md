@@ -8,6 +8,8 @@ a fabric server side mod that voxelizes chunks into LODs using [voxy](https://gi
 
 when chunks load on the server, they get voxelized into voxy's LOD format and stored in a per world database. when a player with voxy connects, the server streams LOD sections to them in a spiral outward from their position. as the player moves, new sections are sent automatically.
 
+block changes (building, explosions, etc) are detected and the affected LOD sections are revoxelized and pushed to nearby players automatically.
+
 players without voxy are unaffected.
 
 ## building
@@ -54,6 +56,8 @@ config file is generated at `config/voxyserver.json` on first run.
 | `maxSectionsPerTickPerPlayer` | `10` | max LOD sections sent per player per tick cycle |
 | `tickInterval` | `5` | server ticks between each streaming cycle |
 | `generateOnChunkLoad` | `true` | voxelize chunks as they load on the server |
+| `dirtyTrackingEnabled` | `true` | revoxelize and push LODs when blocks change |
+| `dirtyTrackingInterval` | `40` | ticks between dirty chunk flushes (40 = 2 seconds) |
 
 ### example config
 
@@ -62,7 +66,9 @@ config file is generated at `config/voxyserver.json` on first run.
   "lodStreamRadius": 256,
   "maxSectionsPerTickPerPlayer": 10,
   "generateOnChunkLoad": true,
-  "tickInterval": 5
+  "tickInterval": 5,
+  "dirtyTrackingEnabled": true,
+  "dirtyTrackingInterval": 40
 }
 ```
 

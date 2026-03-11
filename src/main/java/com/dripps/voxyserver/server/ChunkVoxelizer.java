@@ -40,4 +40,9 @@ public class ChunkVoxelizer {
 
         engine.getIngestService().enqueueIngest(world, chunk);
     }
+
+    // revoxelize an already loaded chunk (dirty tracking)
+    public void revoxelizeChunk(ServerLevel level, LevelChunk chunk) {
+        ingestChunk(level, chunk);
+    }
 }

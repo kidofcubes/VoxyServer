@@ -146,6 +146,56 @@ public class LodStreamingService {
         }
     }
 
+    // push updated sections for a dirty chunk to all players who already have it
+    public void onChunkDirty(MinecraftServer server, ServerLevel level, int chunkX, int chunkZ) {
+        int worldSecX = chunkX >> 1;
+        int worldSecZ = chunkZ >> 1;
+        int minY = level.getMinSectionY() >> 1;
+        int maxY = (level.getMaxSectionY() >> 1) + 1;
+
+        WorldIdentifier worldId = WorldIdentifier.of(level);
+        if (worldId == null) return;
+
+        Identifier dimension = level.dimension().identifier();
+        Registry<Biome> biomeRegistry = level.registryAccess().lookupOrThrow(Registries.BIOME);
+
+        streamExecutor.execute(() -> {
+            WorldEngine world = engine.getOrCreate(worldId);
+            if (world == null) return;
+            Mapper mapper = world.getMapper();
+
+            for (int secY = minY; secY < maxY; secY++) {
+                long key = WorldEngine.getWorldSectionId(0, worldSecX, secY, worldSecZ);
+                WorldSection section = world.acquireIfExists(0, worldSecX, secY, worldSecZ);
+                if (section == null) continue;
+
+                LODSectionPayload payload;
+                try {
+                    payload = serializeSection(section, dimension, mapper, biomeRegistry);
+                } finally {
+                    section.release();
+                }
+                if (payload == null) continue;
+
+                LODSectionPayload finalPayload = payload;
+                long sectionKey = key;
+                // send to all players who already received this section
+                for (var entry : trackers.entrySet()) {
+                    PlayerLodTracker tracker = entry.getValue();
+                    if (!tracker.isReady() || !tracker.hasSent(sectionKey)) continue;
+
+                    UUID playerId = entry.getKey();
+                    server.execute(() -> {
+                        ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+                        if (player != null) {
+                            ServerPlayNetworking.send(player, finalPayload);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
     public void onDimensionChange(ServerPlayer player, ServerLevel newLevel) {
         var tracker = trackers.get(player.getUUID());
         if (tracker == null || !tracker.isReady()) return;

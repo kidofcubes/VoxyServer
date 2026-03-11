@@ -17,6 +17,8 @@ public class VoxyServerConfig {
     public int maxSectionsPerTickPerPlayer = 10;
     public boolean generateOnChunkLoad = true;
     public int tickInterval = 5;
+    public boolean dirtyTrackingEnabled = true;
+    public int dirtyTrackingInterval = 40;
 
     public static VoxyServerConfig load() {
         Path configPath = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
