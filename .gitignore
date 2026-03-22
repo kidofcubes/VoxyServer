@@ -1,7 +1,6 @@
 build/
 run/
 .gradle/
-gradle/wrapper/gradle-wrapper.jar
 .idea/
 *.iml
 .vscode/
