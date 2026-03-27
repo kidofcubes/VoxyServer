@@ -43,7 +43,7 @@ public class Voxyserver implements ModInitializer {
                 VoxyServerCommands.register(dispatcher, () -> importCoordinator));
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             if (!server.isDedicatedServer()) {
-                LOGGER.info("disabledi in sp");
+                LOGGER.info("VoxyServer disabled in singleplayer.");
                 return;
             }
 
