@@ -39,6 +39,8 @@ repositories {
             includeGroup "maven.modrinth"
         }
     }
+    maven { url = "https://maven.terraformersmc.com/" }
+    maven { url = "https://maven.shedaniel.me/" }
     mavenCentral()
 }
 
@@ -52,6 +54,8 @@ dependencies {
 
     modImplementation files("libs/voxy-1.21.11.jar")
     modCompileOnly "maven.modrinth:sodium:mc1.21.11-0.8.6-fabric"
+    modCompileOnly "com.terraformersmc:modmenu:17.0.0"
+    modCompileOnly "me.shedaniel.cloth:cloth-config-fabric:21.11.153"
 
     // lwjgl is bundled with the client but not the dedicated server
     // voxy's Mapper uses MemoryUtil for off-heap allocation

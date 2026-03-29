@@ -18,6 +18,9 @@
     ],
     "main": [
       "com.dripps.voxyserver.Voxyserver"
+    ],
+    "modmenu": [
+      "com.dripps.voxyserver.client.VoxyModMenuIntegration"
     ]
   },
   "mixins": [
@@ -33,6 +36,8 @@
     "minecraft": "${minecraft_version}"
   },
   "suggests": {
-    "voxy": "*"
+    "voxy": "*",
+    "modmenu": "*",
+    "cloth-config": "*"
   }
 }

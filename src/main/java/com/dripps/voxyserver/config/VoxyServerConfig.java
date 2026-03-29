@@ -15,6 +15,7 @@ public class VoxyServerConfig {
 
     public int lodStreamRadius = 256;
     public int maxSectionsPerTickPerPlayer = 10;
+    public int sectionsPerPacket = 50;
     public boolean generateOnChunkLoad = true;
     public int tickInterval = 5;
     public boolean dirtyTrackingEnabled = true;

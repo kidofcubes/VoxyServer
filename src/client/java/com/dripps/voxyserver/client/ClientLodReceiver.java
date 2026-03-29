@@ -4,6 +4,7 @@ import com.dripps.voxyserver.network.LODBulkPayload;
 import com.dripps.voxyserver.network.LODClearPayload;
 import com.dripps.voxyserver.network.LODReadyPayload;
 import com.dripps.voxyserver.network.LODSectionPayload;
+import com.dripps.voxyserver.network.LODServerSettingsPayload;
 import me.cortex.voxy.common.voxelization.VoxelizedSection;
 import me.cortex.voxy.common.voxelization.WorldConversionFactory;
 import me.cortex.voxy.common.world.WorldEngine;
@@ -30,6 +31,15 @@ public class ClientLodReceiver {
         // send ready handshake when joining a server
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             ClientPlayNetworking.send(new LODReadyPayload());
+        });
+
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            ClientLodSettings.reset();
+        });
+
+        ClientPlayNetworking.registerGlobalReceiver(LODServerSettingsPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> ClientLodSettings.applyServerSettings(
+                    payload.maxLodStreamRadius(), payload.maxSectionsPerTick()));
         });
 
         ClientPlayNetworking.registerGlobalReceiver(LODSectionPayload.TYPE, (payload, context) -> {

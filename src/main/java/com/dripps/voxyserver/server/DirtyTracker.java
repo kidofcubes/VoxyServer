@@ -12,8 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DirtyTracker {
     public static volatile DirtyTracker INSTANCE;
 
-    private static final int PUSH_DELAY_TICKS = 2;
-    private static final int MAX_PUSH_ATTEMPTS = 6;
+    private static final int PUSH_DELAY_TICKS = 20;
+    private static final int MAX_PUSH_ATTEMPTS = 10;
 
     private final ConcurrentHashMap<DirtySection, Boolean> dirtySections = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<DirtySection, PendingPush> pendingPushes = new ConcurrentHashMap<>();
@@ -64,6 +64,9 @@ public class DirtyTracker {
             ServerLevel level = findLevel(server, ds.dimension);
             if (level == null) continue;
 
+            // mark world section as pending dirty so streaming doesnt resend stale data
+            streamingService.markChunkPendingDirty(ds.chunkX, ds.sectionY, ds.chunkZ);
+
             ChunkPosDim cpd = new ChunkPosDim(ds.dimension, ds.chunkX, ds.chunkZ);
             if (!revoxelized.contains(cpd)) {
                 LevelChunk chunk = level.getChunkSource().getChunkNow(ds.chunkX, ds.chunkZ);
@@ -94,12 +97,14 @@ public class DirtyTracker {
             ServerLevel level = findLevel(server, ds.dimension);
             if (level == null) {
                 pendingPushes.remove(ds, pending);
+                streamingService.clearChunkPendingDirty(ds.chunkX, ds.sectionY, ds.chunkZ);
                 continue;
             }
 
             LevelChunk chunk = level.getChunkSource().getChunkNow(ds.chunkX, ds.chunkZ);
             if (chunk == null) {
                 pendingPushes.remove(ds, pending);
+                streamingService.clearChunkPendingDirty(ds.chunkX, ds.sectionY, ds.chunkZ);
                 continue;
             }
 
@@ -107,6 +112,7 @@ public class DirtyTracker {
 
             if (pending.attemptsLeft <= 1) {
                 pendingPushes.remove(ds, pending);
+                streamingService.clearChunkPendingDirty(ds.chunkX, ds.sectionY, ds.chunkZ);
             } else {
                 pendingPushes.replace(ds, pending, new PendingPush((int) (currentTick + PUSH_DELAY_TICKS), pending.attemptsLeft - 1));
             }

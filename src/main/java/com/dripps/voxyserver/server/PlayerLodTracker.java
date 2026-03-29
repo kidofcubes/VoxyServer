@@ -10,6 +10,10 @@ public class PlayerLodTracker {
     private int lastChunkX;
     private int lastChunkZ;
 
+    private volatile boolean lodEnabled = true;
+    private volatile int preferredRadius = -1;
+    private volatile int preferredMaxSections = -1;
+
     public boolean isReady() {
         return ready;
     }
@@ -49,5 +53,31 @@ public class PlayerLodTracker {
 
     public synchronized int sentCount() {
         return sentSections.size();
+    }
+
+    public boolean isLodEnabled() {
+        return lodEnabled;
+    }
+
+    public void setLodEnabled(boolean enabled) {
+        this.lodEnabled = enabled;
+    }
+
+    public void setPreferredRadius(int radius) {
+        this.preferredRadius = radius;
+    }
+
+    public void setPreferredMaxSections(int maxSections) {
+        this.preferredMaxSections = maxSections;
+    }
+
+    // returns the clients preferred radius clamped to the server max, or server default if unset
+    public int getEffectiveRadius(int serverMax) {
+        return (preferredRadius <= 0) ? serverMax : Math.min(preferredRadius, serverMax);
+    }
+
+    // returns the clients preferred rate clamped to the server max, or server default if unset
+    public int getEffectiveMaxSections(int serverMax) {
+        return (preferredMaxSections <= 0) ? serverMax : Math.min(preferredMaxSections, serverMax);
     }
 }

@@ -3,8 +3,10 @@ package com.dripps.voxyserver.server;
 import com.dripps.voxyserver.Voxyserver;
 import com.dripps.voxyserver.network.LODBulkPayload;
 import com.dripps.voxyserver.network.LODClearPayload;
+import com.dripps.voxyserver.network.LODPreferencesPayload;
 import com.dripps.voxyserver.network.LODReadyPayload;
 import com.dripps.voxyserver.network.LODSectionPayload;
+import com.dripps.voxyserver.network.LODServerSettingsPayload;
 import com.dripps.voxyserver.util.IdRemapper;
 import it.unimi.dsi.fastutil.longs.Long2ShortOpenHashMap;
 import me.cortex.voxy.common.world.WorldEngine;
@@ -28,13 +30,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.Set;
 
 public class LodStreamingService {
     private final ServerLodEngine engine;
     private final int lodStreamRadius;
     private final int maxSectionsPerTick;
+    private final int sectionsPerPacket;
     private final int tickInterval;
     private final ConcurrentHashMap<UUID, PlayerLodTracker> trackers = new ConcurrentHashMap<>();
+    private final Set<Long> pendingDirtyKeys = ConcurrentHashMap.newKeySet();
     private final ExecutorService streamExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "VoxyServer Streaming");
         t.setDaemon(true);
@@ -46,6 +51,7 @@ public class LodStreamingService {
         this.engine = engine;
         this.lodStreamRadius = config.lodStreamRadius;
         this.maxSectionsPerTick = config.maxSectionsPerTickPerPlayer;
+        this.sectionsPerPacket = config.sectionsPerPacket;
         this.tickInterval = config.tickInterval;
     }
 
@@ -64,7 +70,23 @@ public class LodStreamingService {
             if (tracker != null) {
                 tracker.setReady(true);
                 Voxyserver.LOGGER.info("player {} is ready for LOD streaming", context.player().getName().getString());
+                ServerPlayNetworking.send(context.player(),
+                        new LODServerSettingsPayload(lodStreamRadius, maxSectionsPerTick));
             }
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(LODPreferencesPayload.TYPE, (payload, context) -> {
+            var tracker = trackers.get(context.player().getUUID());
+            if (tracker == null) return;
+            tracker.setLodEnabled(payload.enabled());
+            tracker.setPreferredRadius(payload.lodStreamRadius());
+            tracker.setPreferredMaxSections(payload.maxSectionsPerTick());
+            if (!payload.enabled()) {
+                tracker.reset();
+            }
+            Voxyserver.LOGGER.info("player {} updated LOD preferences: enabled={}, radius={}, maxSections={}",
+                    context.player().getName().getString(), payload.enabled(),
+                    payload.lodStreamRadius(), payload.maxSectionsPerTick());
         });
 
         ServerTickEvents.END_SERVER_TICK.register(this::onServerTick);
@@ -72,6 +94,16 @@ public class LodStreamingService {
         // when a chunk is (re)voxelized, invalidate the sent flag so the updated section gets restreamed
         ServerChunkEvents.CHUNK_LOAD.register((level, chunk) -> invalidateForChunk(level, chunk.getPos().x, chunk.getPos().z));
         ServerChunkEvents.CHUNK_UNLOAD.register((level, chunk) -> invalidateForChunk(level, chunk.getPos().x, chunk.getPos().z));
+    }
+
+    public void markChunkPendingDirty(int chunkX, int sectionY, int chunkZ) {
+        long key = WorldEngine.getWorldSectionId(0, chunkX >> 1, sectionY, chunkZ >> 1);
+        pendingDirtyKeys.add(key);
+    }
+
+    public void clearChunkPendingDirty(int chunkX, int sectionY, int chunkZ) {
+        long key = WorldEngine.getWorldSectionId(0, chunkX >> 1, sectionY, chunkZ >> 1);
+        pendingDirtyKeys.remove(key);
     }
 
     private void invalidateForChunk(ServerLevel level, int chunkX, int chunkZ) {
@@ -109,7 +141,7 @@ public class LodStreamingService {
         List<PlayerSnapshot> snapshots = new ArrayList<>();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             var tracker = trackers.get(player.getUUID());
-            if (tracker == null || !tracker.isReady()) continue;
+            if (tracker == null || !tracker.isReady() || !tracker.isLodEnabled()) continue;
 
             tracker.updatePosition(player);
             ServerLevel level = player.level();
@@ -179,10 +211,21 @@ public class LodStreamingService {
 
             LODSectionPayload finalPayload = payload;
             long sectionKey = key;
-            // send to all players who already received this section
+            // send to all ready players within lod range (not gated on hasSent,
+            // because invalidateForChunk may have cleared it)
             for (var entry : trackers.entrySet()) {
                 PlayerLodTracker tracker = entry.getValue();
-                if (!tracker.isReady() || !tracker.hasSent(sectionKey)) continue;
+                if (!tracker.isReady()) continue;
+
+                // only send to players whose LOD radius covers this section
+                int playerWorldSecX = tracker.getLastChunkX() >> 1;
+                int playerWorldSecZ = tracker.getLastChunkZ() >> 1;
+                int effectiveRadius = tracker.getEffectiveRadius(lodStreamRadius);
+                int radiusSections = effectiveRadius >> 1;
+                if (Math.abs(worldSecX - playerWorldSecX) > radiusSections
+                        || Math.abs(worldSecZ - playerWorldSecZ) > radiusSections) continue;
+
+                tracker.markSent(sectionKey); // make sure dont send stale data
 
                 UUID playerId = entry.getKey();
                 if (com.dripps.voxyserver.util.ServerStatsTracker.INSTANCE != null) {
@@ -228,23 +271,26 @@ public class LodStreamingService {
         int playerWorldSecX = snap.chunkX >> 1;
         int playerWorldSecZ = snap.chunkZ >> 1;
 
-        int radiusSections = lodStreamRadius >> 1;
+        int effectiveRadius = tracker.getEffectiveRadius(lodStreamRadius);
+        int effectiveMaxSections = tracker.getEffectiveMaxSections(maxSectionsPerTick);
+        int radiusSections = effectiveRadius >> 1;
         Mapper mapper = world.getMapper();
 
         List<LODSectionPayload> batch = new ArrayList<>();
         int sent = 0;
 
-        for (int dist = 0; dist <= radiusSections && sent < maxSectionsPerTick; dist++) {
-            for (int dx = -dist; dx <= dist && sent < maxSectionsPerTick; dx++) {
-                for (int dz = -dist; dz <= dist && sent < maxSectionsPerTick; dz++) {
+        for (int dist = 0; dist <= radiusSections && sent < effectiveMaxSections; dist++) {
+            for (int dx = -dist; dx <= dist && sent < effectiveMaxSections; dx++) {
+                for (int dz = -dist; dz <= dist && sent < effectiveMaxSections; dz++) {
                     if (Math.abs(dx) != dist && Math.abs(dz) != dist) continue;
 
                     int secX = playerWorldSecX + dx;
                     int secZ = playerWorldSecZ + dz;
 
-                    for (int secY = snap.minY; secY < snap.maxY && sent < maxSectionsPerTick; secY++) {
+                    for (int secY = snap.minY; secY < snap.maxY && sent < effectiveMaxSections; secY++) {
                         long key = WorldEngine.getWorldSectionId(0, secX, secY, secZ);
                         if (tracker.hasSent(key)) continue;
+                        if (pendingDirtyKeys.contains(key)) continue;
 
                         WorldSection section = world.acquireIfExists(0, secX, secY, secZ);
                         if (section == null) continue;
@@ -272,10 +318,13 @@ public class LodStreamingService {
                 ServerPlayer player = server.getPlayerList().getPlayer(playerId);
                 if (player == null) return;
                 if (!player.level().dimension().identifier().equals(dim)) return;
-                if (toSend.size() == 1) {
-                    ServerPlayNetworking.send(player, toSend.getFirst());
-                } else {
-                    ServerPlayNetworking.send(player, new LODBulkPayload(dim, toSend));
+                for (int i = 0; i < toSend.size(); i += sectionsPerPacket) {
+                    List<LODSectionPayload> chunk = toSend.subList(i, Math.min(toSend.size(), i + sectionsPerPacket));
+                    if (chunk.size() == 1) {
+                        ServerPlayNetworking.send(player, chunk.getFirst());
+                    } else {
+                        ServerPlayNetworking.send(player, new LODBulkPayload(dim, chunk));
+                    }
                 }
             });
         }

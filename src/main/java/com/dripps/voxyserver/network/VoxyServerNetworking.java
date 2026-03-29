@@ -8,7 +8,9 @@ public class VoxyServerNetworking {
         PayloadTypeRegistry.playS2C().register(LODSectionPayload.TYPE, LODSectionPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(LODBulkPayload.TYPE, LODBulkPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(LODClearPayload.TYPE, LODClearPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(LODServerSettingsPayload.TYPE, LODServerSettingsPayload.CODEC);
 
         PayloadTypeRegistry.playC2S().register(LODReadyPayload.TYPE, LODReadyPayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(LODPreferencesPayload.TYPE, LODPreferencesPayload.CODEC);
     }
 }
