@@ -50,6 +50,10 @@ public class WorldImportCoordinator {
             int done = active.processedChunks.get();
             int total = Math.max(done, active.estimatedChunks.get());
             long elapsedMs = Math.max(1L, System.currentTimeMillis() - active.startedAtMs);
+            double cps = active.cps;
+            int remaining = total - done;
+            double cumulativeCps = done / (elapsedMs / 1000.0);
+            long etaMs = cumulativeCps > 0 ? (long) (remaining / cumulativeCps * 1000) : -1L;
 
             String base = "running "
                     + active.dimensionId
@@ -58,8 +62,10 @@ public class WorldImportCoordinator {
                     + "/"
                     + total
                     + " chunks"
+                    + " at " + String.format("%.1f", cps) + " c/s"
                     + " in "
-                    + formatDuration(elapsedMs);
+                    + formatDuration(elapsedMs)
+                    + (etaMs >= 0 ? " ETA " + formatDuration(etaMs) : "");
 
             if (queued > 0) {
                 base += ", " + queued + " queued";
@@ -228,7 +234,6 @@ public class WorldImportCoordinator {
 
         request.server.execute(() -> {
             sendSuccess(request.source, "starting import for " + request.dimensionId);
-            Voxyserver.LOGGER.info("starting voxy import for {}", request.dimensionId);
         });
 
         importer.runImport(
@@ -236,11 +241,27 @@ public class WorldImportCoordinator {
                     active.processedChunks.set(finished);
                     active.estimatedChunks.set(outOf);
 
+                    if (com.dripps.voxyserver.util.ServerStatsTracker.INSTANCE != null) {
+                        com.dripps.voxyserver.util.ServerStatsTracker.INSTANCE.markVoxelized();
+                    }
+
                     long now = System.currentTimeMillis();
-                    if (now - active.lastUpdateMs < 1000L) {
+                    long elapsed = now - active.lastUpdateMs;
+                    if (elapsed < 1000L) {
                         return;
                     }
+                    int delta = finished - active.lastSnapshotChunks;
+                    double cps = delta / (elapsed / 1000.0);
+                    active.cps = cps;
+                    active.lastSnapshotChunks = finished;
                     active.lastUpdateMs = now;
+
+                    int total = Math.max(finished, outOf);
+                    int remaining = total - finished;
+                    double cumulativeCps = finished / Math.max(1.0, (now - active.startedAtMs) / 1000.0);
+                    long etaMs = cumulativeCps > 0 ? (long) (remaining / cumulativeCps * 1000) : -1L;
+                    String cpsStr = String.format("%.1f", cps);
+                    String etaStr = etaMs >= 0 ? " ETA " + formatDuration(etaMs) : "";
 
                     request.server.execute(() -> {
                         String msg = "importing "
@@ -248,10 +269,12 @@ public class WorldImportCoordinator {
                                 + " "
                                 + finished
                                 + "/"
-                                + Math.max(finished, outOf)
-                                + " chunks";
+                                + total
+                                + " chunks at "
+                                + cpsStr
+                                + " c/s"
+                                + etaStr;
                         sendSuccess(request.source, msg);
-                        Voxyserver.LOGGER.info(msg);
                     });
                 },
                 total -> request.server.execute(() -> this.onImportFinished(runId, active, request, true, total))
@@ -276,7 +299,6 @@ public class WorldImportCoordinator {
                     + totalChunks
                     + " chunks";
             sendSuccess(request.source, msg);
-            Voxyserver.LOGGER.info(msg);
             this.startNext(runId);
             return;
         }
@@ -284,11 +306,9 @@ public class WorldImportCoordinator {
         if (cancelled) {
             String msg = "import cancelled for " + request.dimensionId;
             sendSuccess(request.source, msg);
-            Voxyserver.LOGGER.info(msg);
         } else {
             String msg = "import ended early for " + request.dimensionId;
             sendFailure(request.source, msg);
-            Voxyserver.LOGGER.warn(msg);
         }
 
         synchronized (this.lock) {
@@ -345,6 +365,8 @@ public class WorldImportCoordinator {
         private final AtomicInteger processedChunks = new AtomicInteger();
         private final AtomicInteger estimatedChunks = new AtomicInteger();
         private volatile long lastUpdateMs;
+        private volatile int lastSnapshotChunks;
+        private volatile double cps;
         private volatile boolean cancelled;
 
         private ActiveImport(ImportRequest request, WorldImporter importer) {
