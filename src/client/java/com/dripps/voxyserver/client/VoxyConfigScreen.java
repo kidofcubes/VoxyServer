@@ -9,19 +9,27 @@ import net.minecraft.network.chat.Component;
 public class VoxyConfigScreen {
 
     public static Screen create(Screen parent) {
+        ConfigBuilder builder = ConfigBuilder.create()
+                .setParentScreen(parent)
+                .setTitle(Component.literal("VoxyServer Client Settings"));
+
+        ConfigEntryBuilder entryBuilder = builder.entryBuilder();
+        ConfigCategory category = builder.getOrCreateCategory(Component.literal("LOD Streaming"));
+
+        if (!ClientLodSettings.hasActiveServerProfile()) {
+            category.addEntry(entryBuilder.startTextDescription(
+                    Component.literal("per server overrides can only be edited while connected to a server"))
+                    .build());
+            return builder.build();
+        }
+
         int maxRadius = ClientLodSettings.getServerMaxRadius();
         int maxSections = ClientLodSettings.getServerMaxSections();
 
         if (maxRadius <= 0) maxRadius = 256;
         if (maxSections <= 0) maxSections = 50;
 
-        ConfigBuilder builder = ConfigBuilder.create()
-                .setParentScreen(parent)
-                .setTitle(Component.literal("VoxyServer Client Settings"))
-                .setSavingRunnable(ClientLodSettings::sendPreferences);
-
-        ConfigEntryBuilder entryBuilder = builder.entryBuilder();
-        ConfigCategory category = builder.getOrCreateCategory(Component.literal("LOD Streaming"));
+        builder.setSavingRunnable(ClientLodSettings::saveAndSendPreferences);
 
         category.addEntry(entryBuilder.startBooleanToggle(
                         Component.literal("Enable LOD Streaming"),
@@ -33,7 +41,7 @@ public class VoxyConfigScreen {
 
         category.addEntry(entryBuilder.startIntSlider(
                         Component.literal("LOD Stream Radius"),
-                        Math.max(0, ClientLodSettings.getPreferredRadius()),
+                        ClientLodSettings.getPreferredRadius(),
                         0, maxRadius)
                 .setDefaultValue(0)
                 .setTooltip(Component.literal("how far LODs are streamed in blocks, 0 = server default (" + maxRadius + ")"))
@@ -42,7 +50,7 @@ public class VoxyConfigScreen {
 
         category.addEntry(entryBuilder.startIntSlider(
                         Component.literal("Max Sections Per Tick"),
-                        Math.max(0, ClientLodSettings.getPreferredMaxSections()),
+                        ClientLodSettings.getPreferredMaxSections(),
                         0, maxSections)
                 .setDefaultValue(0)
                 .setTooltip(Component.literal("rate limit for sections sent per tick, 0 = server default (" + maxSections + ")"))

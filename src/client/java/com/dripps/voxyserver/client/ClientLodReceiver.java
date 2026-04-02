@@ -31,6 +31,7 @@ public class ClientLodReceiver {
     public static void register() {
         // send ready handshake when joining a server
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            ClientLodSettings.prepareForCurrentConnection();
             ClientPlayNetworking.send(new LODReadyPayload());
         });
 

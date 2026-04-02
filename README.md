@@ -128,6 +128,8 @@ if the client has [ModMenu](https://modrinth.com/mod/modmenu) and [Cloth Config]
 
 these values are capped at the server's configured maximums and sent to the server automatically when saved.
 
+client preferences are stored in `config/voxyserver-client.json` with a default profile plus per server overrides keyed by their `host:port`. if a server has no saved override yet, the default profile is used. per server overrides can only be edited while connected to that server.
+
 ## commands
 
 server admins can import existing generated chunks into voxy storage with the following commands:
