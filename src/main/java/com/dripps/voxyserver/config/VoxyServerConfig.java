@@ -14,7 +14,7 @@ public class VoxyServerConfig {
     private static final String FILE_NAME = "voxyserver.json";
 
     public int lodStreamRadius = 256;
-    public int maxSectionsPerTickPerPlayer = 10;
+    public int maxSectionsPerTickPerPlayer = 100;
     public int sectionsPerPacket = 50;
     public boolean generateOnChunkLoad = true;
     public int tickInterval = 5;
