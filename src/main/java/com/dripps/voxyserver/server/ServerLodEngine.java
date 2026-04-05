@@ -57,11 +57,20 @@ public class ServerLodEngine extends VoxyInstance {
     }
 
     public WorldEngine getOrCreate(WorldIdentifier identifier, Identifier dimension) {
-        if (identifier == null) {
+        if (identifier == null || !this.isRunning()) {
             return null;
         }
         this.dimensionsByWorld.put(identifier, dimension);
-        WorldEngine world = super.getOrCreate(identifier);
+        WorldEngine world;
+        try {
+            world = super.getOrCreate(identifier);
+        } catch (Exception e) {
+            Voxyserver.LOGGER.error("couldnt get or create world for {}, this is prolly a leaked lock in VoxyInstance", identifier, e);
+            return null;
+        }
+        if (world == null) {
+            return null;
+        }
         this.attachDirtyCallback(identifier, world);
         this.ensurePresenceIndex(identifier, world);
         return world;
@@ -69,7 +78,19 @@ public class ServerLodEngine extends VoxyInstance {
 
     @Override
     public WorldEngine getOrCreate(WorldIdentifier identifier) {
-        WorldEngine world = super.getOrCreate(identifier);
+        if (!this.isRunning()) {
+            return null;
+        }
+        WorldEngine world;
+        try {
+            world = super.getOrCreate(identifier);
+        } catch (Exception e) {
+            Voxyserver.LOGGER.error("couldnt get or create world for {}, this is prolly a leaked lock in VoxyInstance", identifier, e);
+            return null;
+        }
+        if (world == null) {
+            return null;
+        }
         this.attachDirtyCallback(identifier, world);
         this.ensurePresenceIndex(identifier, world);
         return world;
