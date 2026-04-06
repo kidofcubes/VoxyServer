@@ -18,6 +18,7 @@ public class VoxyServerConfig {
     public int sectionsPerPacket = 50;
     public boolean generateOnChunkLoad = true;
     public int tickInterval = 5;
+    public int workerThreads = 3;
     public boolean dirtyTrackingEnabled = true;
     public int dirtyTrackingInterval = 40;
     public boolean debugTrackingEnabled = false;

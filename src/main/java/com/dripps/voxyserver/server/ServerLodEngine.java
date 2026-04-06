@@ -44,6 +44,10 @@ public class ServerLodEngine extends VoxyInstance {
         Voxyserver.LOGGER.info("server lod engine started, storage at {}", this.basePath);
     }
 
+    public void updateDedicatedThreadsCount(int threads){
+        this.setNumThreads(threads);
+    }
+
     public void setDirtySectionListener(DirtySectionListener dirtySectionListener) {
         this.dirtySectionListener = dirtySectionListener;
     }

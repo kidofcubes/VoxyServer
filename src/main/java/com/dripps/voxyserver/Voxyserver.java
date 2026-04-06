@@ -49,6 +49,7 @@ public class Voxyserver implements ModInitializer {
 
             var worldPath = server.getWorldPath(LevelResource.ROOT);
             lodEngine = new ServerLodEngine(worldPath);
+            lodEngine.updateDedicatedThreadsCount(config.workerThreads);
             streamingService = new LodStreamingService(lodEngine, config);
             streamingService.register();
             chunkVoxelizer = new ChunkVoxelizer(lodEngine, streamingService, config);
